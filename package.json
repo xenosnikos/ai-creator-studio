@@ -1,0 +1,47 @@
+{
+  "name": "ai-creator-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "POC: AI social media content generation platform with consistent virtual creators",
+  "scripts": {
+    "dev": "next dev",
+    "prebuild": "node scripts/clean-build-cache.mjs",
+    "build": "next build",
+    "postbuild": "node scripts/finish-standalone.mjs",
+    "start": "node .next/standalone/server.js",
+    "lint": "next lint",
+    "pretypecheck": "node scripts/clean-build-cache.mjs",
+    "typecheck": "tsc --noEmit",
+    "test:identity": "tsx scripts/check-identity-consistency.ts",
+    "test:workflow": "tsx scripts/check-approval-workflow.ts",
+    "test:ui-approval": "tsx scripts/test-approval-ui.ts",
+    "doctor": "tsx --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/doctor.ts",
+    "seed": "tsx --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/seed.ts",
+    "reset": "node scripts/clean-build-cache.mjs --data",
+    "screenshots": "tsx scripts/screenshots.ts",
+    "docker": "docker compose up --build",
+    "share": "tsx scripts/share.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
+    "ffmpeg-static": "^5.3.0",
+    "next": "^16.2.12",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.20",
+    "playwright": "^1.62.0",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=22.5"
+  }
+}

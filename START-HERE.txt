@@ -1,0 +1,250 @@
+AI CREATOR STUDIO — HOW TO OPEN IT
+==================================
+
+IMPORTANT: there is no website link to click. This is an app you run on your own
+computer. "http://localhost:3000" means "this computer" — it only works AFTER you
+start the app, using the steps below. Clicking it before that gives
+"This site can't be reached", which is what you saw.
+
+
+STEP 1 — Install Node.js (one time, ~2 minutes)
+-----------------------------------------------
+Go to  https://nodejs.org  and install the big green "LTS" button.
+Accept all the defaults. Then restart your terminal.
+
+To check it worked, open a terminal and type:
+
+    node --version
+
+You need v22.5 or higher (v24 is fine). Nothing gets compiled, so you do NOT
+need Visual Studio or any build tools.
+
+
+STEP 2 — Open a terminal in this folder
+---------------------------------------
+Windows : open this folder in File Explorer, click the address bar,
+          type  cmd  and press Enter.
+Mac     : right-click this folder -> Services -> "New Terminal at Folder".
+          (Or open Terminal and type  cd  then drag this folder onto the window.)
+
+
+STEP 3 — Run these two commands
+-------------------------------
+    npm install
+    npm run dev
+
+The first one takes a minute or two and prints a lot of text — that is normal.
+The second one prints something like:
+
+    - Local:  http://localhost:3000
+
+Leave that terminal window OPEN. Closing it stops the app.
+
+
+STEP 4 — Open the app
+---------------------
+In your browser, go to:
+
+    http://localhost:3000
+
+You should see "AI Creator Studio" with three sample creators already there.
+Nothing to configure — it works immediately using placeholder images so you can
+click through the whole workflow for free.
+
+
+STEP 5 — Add your API keys (to generate for real)
+------------------------------------------------
+Click "Settings" in the top menu, then paste:
+
+  * Anthropic key  -> from  https://console.anthropic.com/settings/keys
+                      (storyboards, scripts, reading reference photos)
+
+  * KIE AI key     -> from  https://kie.ai/api-key
+                      (every image and every video clip)
+
+  * ElevenLabs key -> from  https://elevenlabs.io/app/settings/api-keys
+                      (the voice-over)
+
+Press "Test" next to each one — it checks the key against the real service, so
+you find out straight away if it was pasted wrong. Then press "Save keys".
+
+That's it. The badge in the top-right switches from "mock providers" to "Live
+providers", and everything you generate from then on is real.
+
+
+CHECKING YOUR KEYS ACTUALLY WORK
+--------------------------------
+After adding your keys, run:
+
+    npm run doctor
+
+It checks each key against the real service and tells you what works. Free -
+it does not generate anything.
+
+To also verify the image / video / voice / lip-sync models exist on your KIE
+plan, run:
+
+    npm run doctor -- --generate
+
+That one submits one tiny job per model and DOES spend a small amount of your
+KIE credits. It is the only way to find out whether the lip-sync model id is
+right for your account.
+
+The output never contains your keys, so it is safe to copy and send to anyone
+helping you.
+
+
+WHAT TO TRY FIRST
+-----------------
+1. Creators -> click "Mia Tanaka" -> "Rebuild identity sheet".
+   This generates the same person from 6 angles (front, three-quarter, side,
+   rear, close-up, full body). It is the proof that identity holds up.
+
+2. Projects -> "Tokyo ramen guide" -> "Generate storyboard".
+   You get a scene-by-scene shot list plus the spoken script.
+
+3. On that project, click "Keyframes", then "Voice-over", then "Clips".
+   Each clip is cut to the real length of its own spoken line, and the voice is
+   attached to it. Under every clip you will see what happened to the sound:
+   "lip-synced", "voice attached", or "clip + voice separate" with the reason.
+
+4. Scroll to "Character swap" at the bottom, pick a different creator, and press
+   "Swap & render keyframes". The scenes, dialogue and camera work stay exactly
+   the same — only the person changes.
+
+5. "Export bundle" downloads everything as one ZIP.
+
+
+IF SOMETHING GOES WRONG
+-----------------------
+"npm: command not found"
+    Node.js is not installed, or the terminal needs restarting. Redo Step 1.
+
+"gyp ERR!" / "node-gyp" / "not ok" during npm install
+    You are on an old copy of this app. Download the latest ZIP — the version
+    that needed a C++ compiler has been replaced. Delete the node_modules
+    folder first if it exists, then run  npm install  again.
+
+"'tsx' is not recognized"
+    npm install did not finish. Scroll up to find the real error, fix that,
+    and run  npm install  again.
+
+"This site can't be reached"
+    The app is not running. Check the terminal from Step 3 is still open and
+    shows "Local: http://localhost:3000". If it closed, run  npm run dev  again.
+
+"3 high severity vulnerabilities" after npm install
+    Expected, and do NOT run the "npm audit fix --force" it suggests - that
+    would downgrade Next.js from version 16 to version 9 and break the app.
+    The warnings are about two libraries inside Next.js itself (postcss and
+    sharp) that only run while building and while resizing images on your own
+    machine. The newest Next.js still ships them; there is nothing to update to.
+
+"DeprecationWarning" / "ExperimentalWarning" lines
+    Harmless notices from Node.js, not errors. Ignore them.
+
+Clips say "clip + voice separate" instead of "lip-synced"
+    Expected on placeholder mode - there is no real video to sync. With real
+    keys it means either the lip-sync model is not on your KIE plan (the note
+    under the clip says so) or ffmpeg is not installed. Neither loses the
+    render: you get the clip and the voice file, ready to combine in any editor.
+    To get automatic overlay without lip sync, install ffmpeg from
+    https://ffmpeg.org/download.html and restart the app.
+
+"Failed to type check" with an error inside  .next/dev/types/routes.d.ts
+    A leftover file from a development server that was interrupted, not a
+    problem in the app. Delete the build folder and run the command again:
+
+        Windows :  rmdir /s /q .next
+        Mac     :  rm -rf .next
+
+    npm run build and npm run share now clear that folder on their own, so
+    this only affects copies of the app from before that change.
+
+"Port 3000 is already in use"
+    Something else is using that port. Run:  npm run dev -- -p 3001
+    then open  http://localhost:3001  instead.
+
+Anything else
+    Copy the red error text from the terminal and send it over.
+
+
+ALTERNATIVE: Docker
+-------------------
+If you already have Docker Desktop, you can skip Node entirely:
+
+    docker compose up
+
+then open http://localhost:3000. (Note: this route was not testable in the
+environment where the app was built, so if it errors, use Steps 1-3 instead.)
+
+
+SHARING IT WITH SOMEONE ELSE (e.g. your boss)
+---------------------------------------------
+Run this ONE command:
+
+    npm run share
+
+It does everything: builds the app, makes up a password, starts the server, and
+opens a public web link. First it prints the local address and the password:
+
+      Running at http://localhost:3000  -  password: amber-slate-4821
+
+You can open that straight away. Then it works on the public link, which takes
+1-3 minutes the first time because it has to download the tunnel program. While
+that happens you will see a lot of repeated lines like:
+
+    [main ...] update#setState downloading
+
+That is normal - it is the download, not an error. When it finishes you get:
+
+    ------------------------------------------------------
+      READY - send these two things to whoever is testing:
+
+        Link:      https://something-random.trycloudflare.com
+        Password:  amber-slate-4821
+    ------------------------------------------------------
+
+Send that link and password. When their browser asks for a username, anything
+works - only the password is checked. The password is the same one printed
+earlier, so it also works on http://localhost:3000.
+
+Keep the window open. Closing it, or letting your computer sleep, takes the
+link offline. The link also changes each time you run the command.
+
+To choose your own password instead of a random one:
+
+    Windows (cmd):  set SHARE_PASSWORD=my-password
+                    npm run share
+    Mac:            SHARE_PASSWORD='my-password' npm run share
+
+
+IF THE LINK DOESN'T WORK
+------------------------
+Some office and school networks block these tunnels. The command tries three
+different services in turn - you will see "Trying Tunnelmole instead..." and
+then "Trying localtunnel instead..." as it works through them. Each one gets
+about 90 seconds, so give it a few minutes before deciding it has failed.
+
+If all three fail you get "Could not open a public link". The app itself is
+fine - it is still running on your own machine; only the public address failed.
+Three ways round it, in the order worth trying:
+
+1. Same office or house
+   The command prints a second address near the top, like
+
+       On the same office or home network, this already works from another
+       machine - no public link needed:  http://192.168.1.42:3000
+
+   Send THAT address and the password. It goes straight across your own
+   network, so the firewall that blocks the tunnels cannot touch it. (If it is
+   not printed, run  ipconfig  on Windows and use the IPv4 Address.)
+
+2. Phone hotspot
+   Connect this computer to your phone's hotspot and run  npm run share
+   again. It is usually the office network doing the blocking, and a hotspot
+   is not on it.
+
+3. A permanent link
+   Put it on a real host. See docs/DEPLOY.md; Railway is the shortest path and
+   gives you an address that keeps working when your laptop is closed.

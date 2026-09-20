@@ -1,0 +1,9 @@
+node_modules
+.next
+data
+.git
+.env
+.env.local
+screenshots
+*.tsbuildinfo
+next-env.d.ts

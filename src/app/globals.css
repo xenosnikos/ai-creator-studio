@@ -1,0 +1,593 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Design tokens.
+ *
+ * Three rules hold this together:
+ *
+ * 1. **One hue, honest steps.** Every surface is the same blue-violet neutral
+ *    at a different lightness, so they read as a stack rather than a pile of
+ *    unrelated greys. Each step is a real increment plus a hairline border —
+ *    that is what makes depth legible on a dark theme without heavy shadows,
+ *    which on dark backgrounds just look like smudges.
+ *
+ * 2. **State has a colour, and it is a token.** Success, warning and danger
+ *    are declared once here instead of being re-typed as raw rgb in a dozen
+ *    component rules. A status colour that drifts between two components is a
+ *    status colour nobody trusts.
+ *
+ * 3. **Motion is one curve.** A single easing variable, used everywhere. Mixed
+ *    easings are the difference between an interface that feels made and one
+ *    that feels assembled.
+ */
+:root {
+  color-scheme: dark;
+
+  /**
+   * Ground: graphite with a violet bias, not neutral grey.
+   *
+   * A pure grey reads as unconsidered. The bias is toward the accent, which is
+   * what makes a dark interface feel like one material rather than a stack of
+   * unrelated panels.
+   */
+  --surface-0: #0a0a0f;
+  --surface-1: #101017;
+  --surface-2: #16161f;
+  --surface-3: #1d1d28;
+  --surface-4: #262633;
+
+  --border: #232330;
+  --border-strong: #33333f;
+
+  --text: #ecedf3;
+  --text-dim: #9698a8;
+  --text-faint: #676a7b;
+
+  /**
+   * Accent: indigo.
+   *
+   * The previous mint-on-black is one of the two or three palettes every
+   * generated interface arrives in, and it also collided with "success" —
+   * the same colour meant both "primary action" and "this worked", so neither
+   * read as a signal. Indigo is a decision rather than a default, and it
+   * leaves green free to mean only what green should mean.
+   */
+  --accent: #7d82f2;
+  --accent-dim: #6167e8;
+  --accent-deep: #4c50c4;
+  --accent-ink: #b9bcff;
+
+  /* Semantic state, kept clear of the accent so a colour means one thing. */
+  --ok: #4ade80;
+  --warn: #f5b445;
+  --danger: #f8717f;
+  --info: #60a5fa;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
+  --shadow-md: 0 8px 24px -10px rgb(0 0 0 / 0.65);
+  --shadow-lg: 0 24px 56px -20px rgb(0 0 0 / 0.75);
+  /* A hairline of light along the top edge — the cheapest way to make a dark
+     surface read as a physical object rather than a hole. */
+  --lift: inset 0 1px 0 rgb(255 255 255 / 0.045);
+
+  /* Tighter than before. Large radii on every element is the other tell of a
+     generated interface; these are closer to a cut edge than a pill. */
+  --radius-sm: 6px;
+  --radius: 9px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --fast: 130ms;
+  --normal: 220ms;
+
+  /* Utility face for anything that is data rather than prose: ids, counts,
+     timings, state. Borrowed from the subject — a cutting room labels
+     everything, and labels are set in the machine's typeface, not the
+     brochure's. */
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--surface-0);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Numerals that line up in tables and progress readouts, and no accidental
+     ligatures in ids and hashes. */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "cv02", "cv03", "cv04", "ss01";
+}
+
+/**
+ * Ambient light.
+ *
+ * Two very soft washes behind everything, fixed to the viewport. Flat black
+ * over a whole page reads as unfinished; this gives the surface somewhere to
+ * sit without ever becoming a visible gradient.
+ */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(58rem 38rem at 12% -12%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 62%),
+    radial-gradient(46rem 32rem at 96% 4%, color-mix(in srgb, var(--info) 4%, transparent), transparent 58%);
+}
+
+/* One shared focus ring, so keyboard users get the same affordance everywhere
+   instead of the browser default on some controls and nothing on others. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--text);
+}
+
+/* Scrollbars, so long panels don't punch a bright hole in a dark page. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #414a61;
+  background-clip: content-box;
+}
+
+@layer components {
+  /* ---------------------------------------------------------------- surfaces */
+
+  .panel {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm), var(--lift);
+  }
+
+  .panel-raised {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  /* Card that responds to the pointer — used for creator and project tiles. */
+  .card-interactive {
+    position: relative;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm), var(--lift);
+    transition:
+      transform var(--normal) var(--ease),
+      border-color var(--normal) var(--ease),
+      box-shadow var(--normal) var(--ease),
+      background var(--normal) var(--ease);
+  }
+  .card-interactive:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-md), var(--lift);
+  }
+
+  /* The image half of a card. Pairs with `.card-media img` to zoom on hover. */
+  .card-media {
+    overflow: hidden;
+    background: var(--surface-0);
+    position: relative;
+  }
+  .card-media img {
+    transition: transform 600ms var(--ease);
+  }
+  .card-interactive:hover .card-media img {
+    transform: scale(1.035);
+  }
+  /* Keeps text legible if it ever overlaps the image, and stops a bright
+     render from fighting the card border. */
+  .card-media::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(to top, rgb(8 9 14 / 0.55), transparent 45%);
+  }
+
+  /* ---------------------------------------------------------------- buttons */
+
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2 text-sm font-medium;
+    padding: 0.5rem 0.875rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+    box-shadow: var(--shadow-sm), var(--lift);
+    transition:
+      background var(--fast) var(--ease),
+      border-color var(--fast) var(--ease),
+      color var(--fast) var(--ease),
+      transform var(--fast) var(--ease),
+      box-shadow var(--fast) var(--ease);
+  }
+  .btn:hover:not(:disabled) {
+    background: var(--surface-3);
+    border-color: var(--border-strong);
+  }
+  .btn:active:not(:disabled) {
+    transform: translateY(1px) scale(0.995);
+    box-shadow: none;
+  }
+  /*
+   * A disabled control has to look deliberately switched off rather than
+   * half-rendered. The old 40% opacity made a dark button nearly vanish, which
+   * reads as "the page is broken" instead of "this is not available yet" —
+   * that was a real source of confusion. Now it keeps its shape and border and
+   * only the text recedes, and `not-allowed` confirms it on hover.
+   */
+  .btn:disabled {
+    cursor: not-allowed;
+    background: var(--surface-1);
+    border-color: var(--border);
+    color: var(--text-faint);
+    box-shadow: none;
+  }
+
+  /*
+   * The primary action is FILLED.
+   *
+   * It used to be a tinted outline like everything else, which is why nothing
+   * on a page read as the thing to press — the one control that should carry
+   * weight was styled as quietly as the ones beside it.
+   */
+  .btn-primary {
+    border-color: transparent;
+    background: linear-gradient(180deg, var(--accent), var(--accent-dim));
+    color: #0a0a12;
+    font-weight: 600;
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.4),
+      inset 0 1px 0 rgb(255 255 255 / 0.22);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: linear-gradient(180deg, var(--accent-ink), var(--accent));
+    box-shadow:
+      0 8px 22px -10px color-mix(in srgb, var(--accent) 75%, transparent),
+      inset 0 1px 0 rgb(255 255 255 / 0.28);
+  }
+  .btn-primary:disabled {
+    background: var(--surface-1);
+    border-color: var(--border);
+    color: var(--text-faint);
+  }
+
+  .btn-danger {
+    border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+    color: color-mix(in srgb, var(--danger) 80%, white);
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    border-color: color-mix(in srgb, var(--danger) 60%, transparent);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    color: var(--text-dim);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--surface-2);
+    color: var(--text);
+    border-color: transparent;
+  }
+
+  .btn-sm {
+    padding: 0.3125rem 0.625rem;
+    font-size: 0.75rem;
+    border-radius: var(--radius-sm);
+  }
+
+  .btn-lg {
+    padding: 0.6875rem 1.25rem;
+    font-size: 0.9375rem;
+    border-radius: var(--radius);
+  }
+
+  /* Square icon button — used for destructive actions on cards, where a full
+     text button would compete with the card's own content. */
+  .btn-icon {
+    padding: 0.375rem;
+    width: 2rem;
+    height: 2rem;
+    border-radius: var(--radius-sm);
+  }
+
+  /* ------------------------------------------------------------------ forms */
+
+  .field {
+    @apply w-full;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface-0);
+    color: var(--text);
+    font-size: 0.875rem;
+    transition:
+      border-color var(--fast) var(--ease),
+      box-shadow var(--fast) var(--ease),
+      background var(--fast) var(--ease);
+  }
+  .field::placeholder {
+    color: var(--text-faint);
+  }
+  .field:hover:not(:disabled):not(:focus) {
+    border-color: var(--border-strong);
+  }
+  .field:focus {
+    border-color: var(--accent);
+    outline: none;
+    background: var(--surface-1);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  .field:disabled {
+    cursor: not-allowed;
+    color: var(--text-faint);
+    background: var(--surface-1);
+  }
+
+  select.field {
+    /* Native arrow is invisible on a dark control in several browsers. */
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
+      linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
+    background-position: calc(100% - 18px) 52%, calc(100% - 13px) 52%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 2.25rem;
+  }
+
+  .label {
+    @apply mb-1.5 block font-medium uppercase;
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+  }
+
+  .help {
+    font-size: 0.75rem;
+    line-height: 1.55;
+    color: var(--text-faint);
+  }
+
+  /* ------------------------------------------------------------------ chips */
+
+  /* Square-ish, monospaced, small. A row of rounded pills is the other thing
+     every generated interface arrives wearing; these read as the labels on a
+     film can, which is what they actually are. */
+  .chip {
+    @apply inline-flex items-center gap-1;
+    padding: 0.1875rem 0.4375rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    line-height: 1.3;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+
+  .chip-live,
+  .chip-ok {
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--accent);
+  }
+
+  .chip-mock,
+  .chip-warn {
+    border-color: color-mix(in srgb, var(--warn) 35%, transparent);
+    background: color-mix(in srgb, var(--warn) 12%, transparent);
+    color: color-mix(in srgb, var(--warn) 75%, white);
+  }
+
+  .chip-danger {
+    border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    color: color-mix(in srgb, var(--danger) 75%, white);
+  }
+
+  /* A status dot for list rows, where a full chip would be too loud. */
+  .dot {
+    display: inline-block;
+    width: 0.4375rem;
+    height: 0.4375rem;
+    border-radius: 999px;
+    background: var(--text-faint);
+    flex: none;
+  }
+  .dot-ok {
+    background: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  .dot-live {
+    background: var(--info);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--info) 18%, transparent);
+    animation: pulse 1.8s ease-in-out infinite;
+  }
+  .dot-warn {
+    background: var(--warn);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 18%, transparent);
+  }
+
+  /* ------------------------------------------------------------------ notes */
+
+  .note {
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+    padding: 0.75rem 1rem;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+  }
+  .note-ok {
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    color: color-mix(in srgb, var(--accent) 85%, white);
+  }
+  .note-warn {
+    border-color: color-mix(in srgb, var(--warn) 35%, transparent);
+    background: color-mix(in srgb, var(--warn) 8%, transparent);
+    color: color-mix(in srgb, var(--warn) 70%, white);
+  }
+  .note-error {
+    border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+    background: color-mix(in srgb, var(--danger) 8%, transparent);
+    color: color-mix(in srgb, var(--danger) 65%, white);
+  }
+
+  /* ------------------------------------------------------------- typography */
+
+  .page-title {
+    @apply font-semibold;
+    font-size: clamp(1.5rem, 1.15rem + 1.1vw, 1.9375rem);
+    letter-spacing: -0.028em;
+    line-height: 1.1;
+    color: var(--text);
+    text-wrap: balance;
+  }
+
+  .page-subtitle {
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    line-height: 1.65;
+    color: var(--text-dim);
+    max-width: 66ch;
+  }
+
+  .section-title {
+    @apply font-medium uppercase;
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+  }
+
+  /* ----------------------------------------------------------------- layout */
+
+  /**
+   * The header block every page opens with: title and description on the left,
+   * actions on the right, wrapping cleanly on narrow screens. Previously each
+   * page re-implemented this with slightly different spacing, which is exactly
+   * the kind of drift that makes an app feel assembled rather than designed.
+   */
+  .page-head {
+    @apply flex flex-wrap items-end justify-between gap-4;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* An empty state that looks intentional rather than broken. */
+  .empty {
+    @apply grid place-items-center text-center;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-lg);
+    background:
+      linear-gradient(180deg, var(--surface-1), transparent);
+    padding: 3.5rem 2rem;
+  }
+
+  .divider {
+    height: 1px;
+    background: var(--border);
+    border: 0;
+  }
+
+  /* Loading placeholder for anything still rendering. */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--surface-2) 25%,
+      var(--surface-3) 50%,
+      var(--surface-2) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+    border-radius: var(--radius);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-in {
+  animation: fade-up 0.32s var(--ease) both;
+}
+
+/* Anyone who has asked their OS to stop animating things means it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .card-interactive:hover {
+    transform: none;
+  }
+  .card-interactive:hover .card-media img {
+    transform: none;
+  }
+}

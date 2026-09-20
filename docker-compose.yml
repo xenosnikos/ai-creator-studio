@@ -1,0 +1,30 @@
+# Run the studio with one command:
+#
+#   docker compose up
+#
+# Then open http://localhost:3000 and add your API keys on the Settings page.
+
+services:
+  studio:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      # Database, saved API keys and every generated asset live here, so they
+      # survive `docker compose down` and image rebuilds.
+      - studio-data:/data
+    environment:
+      DATA_DIR: /data
+      # Optional: set keys here instead of using the Settings page. Values from
+      # your shell are passed through, e.g.
+      #   ANTHROPIC_API_KEY=sk-ant-... KIE_API_KEY=... docker compose up
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      KIE_API_KEY: ${KIE_API_KEY:-}
+      # Set this before sharing the app outside your own machine. Any username
+      # works; the password is what matters.
+      #   SHARE_PASSWORD=something-long docker compose up
+      SHARE_PASSWORD: ${SHARE_PASSWORD:-}
+    restart: unless-stopped
+
+volumes:
+  studio-data:

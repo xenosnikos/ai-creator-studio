@@ -1,0 +1,13 @@
+node_modules/
+.next/
+out/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# Local runtime state: SQLite DB + downloaded generated assets
+data/
+
+.env
+.env.local
+.DS_Store
