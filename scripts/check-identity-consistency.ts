@@ -7,6 +7,7 @@ import {
   locationReferencePosition,
   selectReferences,
   wardrobeReferencePosition,
+  IMAGE_PROMPT_LIMIT,
 } from "@/lib/prompting";
 import type { Creator, CreatorReference, SceneSpec } from "@/lib/types";
 
@@ -141,16 +142,16 @@ assert.match(prompt, /IDENTITY GROUND TRUTH: REFERENCE IMAGES 1, 2, 3/);
 assert.match(prompt, /White linen blazer over a charcoal silk top with black trousers/i);
 assert.doesNotMatch(prompt, /blue dress/i);
 assert.match(prompt, /APPEARANCE CONTINUITY: REFERENCE IMAGE 4 is scene 1/i);
-assert.match(prompt, /haircut, hair length, part position/i);
-assert.match(prompt, /complete outfit exactly/i);
+assert.match(prompt, /Copy its haircut, length, part, wave and volume/i);
+assert.match(prompt, /its complete outfit — every garment, colour, material, cut, neckline, sleeve/i);
 assert.match(
   prompt,
   /natural uneven taper rather than a blunt salon cut/i,
   "prompt compression must never discard the exact haircut tail",
 );
 assert.match(prompt, /location, wardrobe or style reference is NOT the subject/i);
-assert.equal(prompt.length <= 4800, true);
-assert.match(prompt, /CAMERA:/, "identity locking must not squeeze out camera instructions");
+assert.equal(prompt.length <= IMAGE_PROMPT_LIMIT, true);
+assert.match(prompt, /PHOTOGRAPH:/, "identity locking must not squeeze out camera instructions");
 assert.match(prompt, /STYLE:/, "identity locking must not truncate the prompt tail");
 
 console.log("identity consistency checks passed");
