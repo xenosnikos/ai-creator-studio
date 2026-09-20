@@ -178,16 +178,37 @@ export const DEFAULT_VOICE: VoiceConfig = {
   voiceId: "FGY2WhTYpPnrIDTdsKH5",
   label: "Laura",
   /**
-   * Stability 0.5 is the single most important number here.
+   * Stability 0.0 is the single most important number here.
    *
    * On v3 the scale is three-valued — 0.0 Creative, 0.5 Natural, 1.0 Robust —
-   * and the old 0.75 landed in the flat, over-controlled register that is
-   * exactly what people mean by "sounds like AI". Consistency across videos
-   * comes from locking the voice *id*, not from suppressing delivery.
+   * and everything above Creative is a brake on delivery. The old 0.75 landed
+   * in the flat, over-controlled register that is exactly what people mean by
+   * "sounds like AI"; 0.5 was better and still even — same stress on every
+   * clause, and the audio tags this pipeline writes into every line largely
+   * ignored. Creative is the mode that actually performs them, and performance
+   * is the whole difference between a read and a person talking.
+   *
+   * Consistency across videos comes from locking the voice *id*, not from
+   * suppressing delivery — which is what makes spending the stability budget on
+   * expressiveness safe rather than reckless.
    */
-  stability: 0.5,
-  similarityBoost: 0.75,
-  style: 0.4,
+  stability: 0.0,
+  /**
+   * Raised with stability off the brake, not independently of it.
+   *
+   * Creative mode is free to vary the read, and similarity is what keeps that
+   * variation inside the chosen voice instead of drifting toward a generic one.
+   * At 0.75 the two changes would have fought each other.
+   */
+  similarityBoost: 0.9,
+  /**
+   * Nudged down for the same reason similarity went up.
+   *
+   * Style exaggerates the voice's own mannerisms, and it now stacks on top of
+   * the expressiveness Creative mode has already unlocked. Past this the read
+   * starts performing *at* the listener, which is its own kind of synthetic.
+   */
+  style: 0.35,
   speed: 1.0,
 };
 

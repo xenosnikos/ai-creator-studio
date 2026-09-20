@@ -371,7 +371,10 @@ export async function generateStoryboard(input: {
     user,
     schema: storyboardSchema,
     parse: (value) => {
-      const parsed = parseStoryboard(value);
+      // The project's kind decides whether narration is required: a video with
+      // silent scenes is rejected here and re-generated, a photo set is silent
+      // by definition.
+      const parsed = parseStoryboard(value, settings.kind);
       const exactCount =
         settings.kind === "photo" ? photoCount(settings.photoCount) : requestedSceneCount;
       if (exactCount && parsed.scenes.length !== exactCount) {

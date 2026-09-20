@@ -66,6 +66,8 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
     if (!isV3) settings.speed = clamp(voice.speed, 0.7, 1.2);
 
     const body: Record<string, unknown> = {
+      // Audio tags are a v3 feature. On any other model they are not
+      // interpreted, they are *spoken*, so the line goes across untouched.
       text: truncate(isV3 ? withDelivery(request.text, request.delivery) : request.text, MAX_TEXT_CHARS),
       model_id: model,
       voice_settings: settings,
@@ -464,15 +466,65 @@ function snapToV3Stability(value: number): number {
  * the cheapest available lever on naturalness, which matters because creating a
  * custom voice through the API needs a paid plan.
  *
- * Skipped when the caller's text already opens with a tag, so a hand-written
- * line is never second-guessed.
+ * Skipped entirely when the caller's text carries a tag of its own *anywhere*,
+ * not just at the front: a line someone has hand-scored is a line that has
+ * already had this decision made for it, and adding to it would be arguing with
+ * the author mid-sentence.
  */
 function withDelivery(text: string, delivery?: string): string {
   const trimmed = text.trim();
-  if (!delivery || /^\s*\[/.test(trimmed)) return trimmed;
-  const tag = delivery.trim().replace(/^\[|\]$/g, "");
-  return tag ? `[${tag}] ${trimmed}` : trimmed;
+  if (HAS_AUDIO_TAG.test(trimmed)) return trimmed;
+
+  const body = withMidLineBreath(trimmed);
+  const tag = delivery?.trim().replace(/^\[|\]$/g, "") ?? "";
+  return tag ? `[${tag}] ${body}` : body;
 }
+
+/** Any `[...]` in the line, which is how a v3 audio tag is written. */
+const HAS_AUDIO_TAG = /\[[^\]]*\]/;
+
+/**
+ * One breath in the middle of a long line.
+ *
+ * The leading mood tag colours the whole take, and a take with one colour and
+ * no punctuation in its performance is where a long sentence starts to sound
+ * recited: v3 reads straight through a comma at an even clip, so a
+ * twenty-five-word line arrives as one unbroken push. A single tag at the first
+ * clause boundary is what a person does there anyway — say the opening phrase,
+ * take a beat, carry on.
+ *
+ * Deliberately conservative, because the failure mode is worse than the gain.
+ * One tag per line, never two. Only on lines long enough to have a middle.
+ * Only at punctuation that already ends a clause and is followed by
+ * whitespace — which is also what guarantees the tag can never land inside a
+ * word, where it would be read out as text rather than performed. And nothing
+ * at all on a line the writer tagged themselves (see above).
+ */
+function withMidLineBreath(line: string): string {
+  if (line.length <= MID_BREATH_MIN_CHARS) return line;
+
+  // Clause-ending punctuation followed by a space. Closing quotes and brackets
+  // are allowed between the two so `"…enough," she says` still matches.
+  const boundary = /[,;:—–]["'’)\]]?\s+|[.!?]["'’)\]]?\s+/g;
+  for (let match = boundary.exec(line); match; match = boundary.exec(line)) {
+    const at = match.index + match[0].length;
+    // Not on top of the opening words, and not so late that what follows is a
+    // fragment — a beat two words from the end reads as a stumble, not a pause.
+    if (at < MID_BREATH_MIN_LEAD || line.length - at < MID_BREATH_MIN_TAIL) continue;
+    return `${line.slice(0, at)}${MID_BREATH_TAG} ${line.slice(at)}`;
+  }
+  return line;
+}
+
+/** Short enough to be a beat rather than a gap the editor has to cut out. */
+const MID_BREATH_TAG = "[pause]";
+/** Below this a line is one clause and has no middle to put a breath in. */
+const MID_BREATH_MIN_CHARS = 60;
+const MID_BREATH_MIN_LEAD = 20;
+const MID_BREATH_MIN_TAIL = 20;
+
+/** Internals exposed for tests only. */
+export const __testingVoice = { withDelivery };
 
 function truncate(value: string, max: number): string {
   return value.length <= max ? value : `${value.slice(0, max - 1)}…`;

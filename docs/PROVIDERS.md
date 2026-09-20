@@ -239,15 +239,26 @@ picking from the form cannot produce a 402. `PREMADE_VOICES` in
 Two settings do most of the work, and the old defaults had both wrong:
 
 - **`ELEVENLABS_MODEL=eleven_v3`.** Markedly more natural than `multilingual_v2`.
-- **`stability: 0.5`.** On v3 this is three-valued — 0.0 Creative, 0.5 Natural, 1.0 Robust.
-  The previous default of 0.75 sat in the flat, over-controlled register that people mean
-  when they say a voice "sounds like AI". Consistency across videos comes from locking the
-  voice *id*, not from suppressing delivery.
+- **`stability: 0.0`.** On v3 this is three-valued — 0.0 Creative, 0.5 Natural, 1.0 Robust —
+  and everything above Creative is a brake on delivery. The original default of 0.75 sat in
+  the flat, over-controlled register that people mean when they say a voice "sounds like AI";
+  0.5 was better and still even, and largely ignored the audio tags below. Creative is the
+  mode that performs them. Consistency across videos comes from locking the voice *id*, not
+  from suppressing delivery, which is what makes spending this budget safe.
+  `similarityBoost` moves to 0.9 with it — Creative is free to vary, and similarity is what
+  keeps that variation inside the chosen voice — and `style` drops to 0.35, because it
+  exaggerates on top of expressiveness that is already unlocked.
 
 v3 also reads inline delivery tags — `[warmly] Tokyo after midnight…` — which are
 interpreted rather than spoken. (Confirmed by transcribing a tagged render: the tag does not
 appear in the words.) `deliveryTagFor()` picks one from the scene's mood, so a project does
 not come back in one flat register from end to end.
+
+On a line over ~60 characters the adapter also drops a single `[pause]` at the first clause
+boundary, which is where a person breathes anyway — v3 reads straight through a comma, so a
+long sentence otherwise arrives as one unbroken push. One tag per line, never inside a word,
+and nothing at all on a line that already carries a tag of its own: a hand-scored line has
+had this decision made for it.
 
 The adapter handles v3's quirks: `stability` is snapped to the nearest legal step, and
 `speed` is omitted because v3 rejects it.
@@ -267,9 +278,11 @@ others.
 
 ### The voice is locked per creator
 
-`VoiceConfig` stores a provider-native `voiceId` for the creator's lifetime, with high
-`stability` (0.75) and `similarityBoost` (0.85). This is deliberate: the requirement is
-*the same voice in every video*, not per-line expressiveness.
+`VoiceConfig` stores a provider-native `voiceId` for the creator's lifetime, and that id is
+what delivers *the same voice in every video*. The expressiveness knobs around it
+(`stability` 0.0, `similarityBoost` 0.9, `style` 0.35) are tuned for a believable read
+rather than a suppressed one — see above for why the id, not the settings, is what holds
+identity.
 
 It also rules out the video model's own audio. Kling and Veo will happily generate speech
 over a clip, and it sounds fine — but it is a **different voice every generation**, which

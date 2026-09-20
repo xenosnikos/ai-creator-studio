@@ -252,7 +252,9 @@ Example briefs are on the home page and one click away in the new-project form.
 ## Architecture
 
 See **`docs/ARCHITECTURE.md`** for the full picture, and **`docs/PROVIDERS.md`** for how to
-replace any model or vendor.
+replace any model or vendor. **`docs/CONVERSATIONAL-API.md`** is the same pipeline driven
+over HTTP — exact request/response shapes for a script, an agent or an MCP server, with the
+approval gates spelled out.
 
 ```
 src/

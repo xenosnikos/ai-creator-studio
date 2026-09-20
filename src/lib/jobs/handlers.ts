@@ -45,13 +45,17 @@ import {
   type Asset,
   type AudioMode,
   type AudioOutcome,
+  type Creator,
+  type CreatorReference,
   type IdentityAngle,
   type JobType,
   type Project,
   type Scene,
+  type ShotType,
 } from "@/lib/types";
 
 import type { JobContext, JobHandler } from "@/lib/jobs/runner";
+import type { TaskResult } from "@/lib/providers/types";
 
 /**
  * Job handlers — one per pipeline stage.
@@ -1151,6 +1155,80 @@ const sceneImage: JobHandler = async (context) => {
     }
   }
 
+  /**
+   * What actually produced the image, as opposed to what was planned.
+   *
+   * The identity gate below can replace all of it, and the asset's record has
+   * to describe the render that happened — a stored prompt that did not make
+   * the picture is worse than no stored prompt, because it looks reproducible.
+   */
+  let rendered = {
+    prompt,
+    referenceUrls,
+    identityReferenceIndices,
+    appearanceContinuityIndex,
+    subjectAngle: scene.spec.subjectAngle,
+    gate: null as string | null,
+    supersededUrl: null as string | null,
+  };
+
+  /**
+   * The identity gate: a wide shot full of people is where the face goes.
+   *
+   * Two things are true at once in a shot like "{CREATOR} pushes through the
+   * cheering crowd", framed extreme wide. The subject is small in frame, so
+   * there are few pixels on the face to match the anchors against; and the
+   * frame contains other faces, which the model is free to average her toward.
+   * The result is a shot that is technically correct and is not the creator —
+   * the exact failure the whole identity kit exists to prevent, arriving
+   * through composition rather than through a bad prompt.
+   *
+   * The gate is deliberately deterministic: shot type plus a small word list,
+   * no vision call, no judgement. A vision check on every wide shot would cost
+   * a request per render to answer a question the storyboard already answers in
+   * writing, and would be wrong in ways nobody could predict from the code.
+   *
+   * It renders a second, tightened variant rather than quietly substituting one
+   * up front, and that is the point of calling it a gate: the first render is
+   * the shot the storyboard asked for, the second is the intervention, and the
+   * asset records both so a reviewer can see that the framing was overridden
+   * and why. It costs one extra image on the small number of scenes that trip
+   * it. Failure is non-fatal — the original render stands.
+   */
+  if (needsIdentityTightening(scene.spec)) {
+    const tightened = await renderIdentityTightened({
+      context,
+      project,
+      scene,
+      creator,
+      lockedWardrobe,
+      durableCreatorReferences,
+      plateUrl,
+      appearanceMaster,
+      wardrobeRefs,
+      locationRefs,
+      styleRefs,
+    }).catch((error) => {
+      console.warn(
+        `[jobs] identity gate: tightened retry for scene ${scene.index + 1} failed — ${message(error)}`,
+      );
+      return null;
+    });
+
+    if (tightened?.result.urls[0]) {
+      rendered = {
+        prompt: tightened.prompt,
+        referenceUrls: tightened.referenceUrls,
+        identityReferenceIndices: tightened.identityReferenceIndices,
+        appearanceContinuityIndex: tightened.appearanceContinuityIndex,
+        subjectAngle: IDENTITY_TIGHTENED_ANGLE,
+        gate: "identity-tightened",
+        supersededUrl: result.urls[0] ?? null,
+      };
+      result = tightened.result;
+    }
+  }
+
   const url = result.urls[0];
   const stored = await persistFromUrl(
     url,
@@ -1165,23 +1243,155 @@ const sceneImage: JobHandler = async (context) => {
     creatorId,
     remoteUrl: url,
     localPath: stored.relativePath,
-    prompt,
+    prompt: rendered.prompt,
     meta: {
       provider: provider.name,
-      referenceCount: referenceUrls.length,
-      identityReferenceIndices,
+      referenceCount: rendered.referenceUrls.length,
+      identityReferenceIndices: rendered.identityReferenceIndices,
       creatorReferencesRefreshed: provider.name !== "mock",
       wardrobeLocked: lockedWardrobe,
-      appearanceContinuityReferenceIndex: appearanceContinuityIndex,
-      appearanceContinuityLocked: appearanceContinuityIndex > 0,
-      subjectAngle: scene.spec.subjectAngle,
+      appearanceContinuityReferenceIndex: rendered.appearanceContinuityIndex,
+      appearanceContinuityLocked: rendered.appearanceContinuityIndex > 0,
+      subjectAngle: rendered.subjectAngle,
       aspectRatio: project.settings.aspectRatio,
       visualFingerprint: visualFingerprint(scene),
+      // Null on every ordinary render, so "was this shot overridden?" is one
+      // field rather than an inference from the prompt text.
+      gate: rendered.gate,
+      ...(rendered.gate
+        ? {
+            // What the storyboard asked for, kept beside what was rendered.
+            gateReason: "wide shot with multiple people in the action",
+            gateRequestedAngle: scene.spec.subjectAngle,
+            gateSupersededUrl: rendered.supersededUrl,
+          }
+        : {}),
     },
   });
 
-  return { assetId: asset.id, url };
+  return { assetId: asset.id, url, ...(rendered.gate ? { gate: rendered.gate } : {}) };
 };
+
+/**
+ * Wording that means more than one person is in the shot.
+ *
+ * A small, literal list rather than anything clever. Prefix-matched on a word
+ * boundary so "crowds", "cheering" and "groups" are covered without listing
+ * every inflection, and kept short on purpose: every entry here costs a render
+ * on the scenes it matches, so a word that is only sometimes about other people
+ * does not belong in it.
+ */
+const MULTIPLE_PEOPLE =
+  /\b(crowd|cheer|group|part(?:y|ies)|audience|spectator|onlooker|bystander|passer|people|guests|friends|dancers|queue)/i;
+
+/** Framings where the subject is too small for the face to survive company. */
+const WIDE_SHOTS: ShotType[] = ["wide", "extreme_wide"];
+
+/** The angle a tightened retry is forced to: the one that carries the face. */
+const IDENTITY_TIGHTENED_ANGLE = "front" as const;
+
+/**
+ * Appended verbatim to the compiled prompt on a tightened retry.
+ *
+ * Added to the end rather than woven into the shot block because it is an
+ * override, not a description: it should read as the last word on framing,
+ * after everything the storyboard said about it.
+ */
+const IDENTITY_TIGHTENING = " , tight framing on the subject, subject clearly in foreground";
+
+function needsIdentityTightening(spec: Scene["spec"]): boolean {
+  return WIDE_SHOTS.includes(spec.shotType) && MULTIPLE_PEOPLE.test(spec.action);
+}
+
+/**
+ * Re-render the shot with the subject front-on and the frame pulled in.
+ *
+ * Everything is recomputed against the forced angle rather than reusing the
+ * first render's list, because the angle is what decides which identity-sheet
+ * shot is attached — asking for a front-on subject while handing the model a
+ * full-body reference would tighten the words and not the picture.
+ *
+ * Returns null when the tightened list has no verified anchor in it, which is
+ * the one case where the retry would be worse than the render it replaces.
+ */
+async function renderIdentityTightened(input: {
+  context: JobContext;
+  project: Project;
+  scene: Scene;
+  creator: Creator;
+  lockedWardrobe: string;
+  durableCreatorReferences: CreatorReference[];
+  plateUrl: string | null;
+  appearanceMaster: string | null;
+  wardrobeRefs: string[];
+  locationRefs: string[];
+  styleRefs: string[];
+}): Promise<{
+  result: TaskResult;
+  prompt: string;
+  referenceUrls: string[];
+  identityReferenceIndices: number[];
+  appearanceContinuityIndex: number;
+} | null> {
+  const { context, project, scene, creator } = input;
+  const provider = imageProvider();
+  const continuityRefs = [input.appearanceMaster].filter((url): url is string => Boolean(url));
+
+  const referenceUrls = selectReferences({
+    references: input.durableCreatorReferences,
+    angle: IDENTITY_TIGHTENED_ANGLE,
+    plateUrls: [input.plateUrl].filter((url): url is string => Boolean(url)),
+    continuityRefs,
+    wardrobeRefs: input.wardrobeRefs,
+    backgroundRefs: input.locationRefs,
+    styleRefs: input.styleRefs,
+  });
+  const identityReferenceIndices = identityReferencePositions(
+    referenceUrls,
+    input.durableCreatorReferences,
+  );
+  if (identityReferenceIndices.length === 0) return null;
+
+  const appearanceContinuityIndex = appearanceContinuityReferencePosition(
+    referenceUrls,
+    continuityRefs,
+  );
+  const prompt =
+    compileImagePrompt(
+      creator,
+      { ...scene.spec, subjectAngle: IDENTITY_TIGHTENED_ANGLE },
+      project.settings.globalStyle,
+      project.settings.look,
+      wardrobeReferencePosition(referenceUrls, input.wardrobeRefs),
+      false,
+      locationReferencePosition(referenceUrls, input.locationRefs),
+      false,
+      identityReferenceIndices,
+      input.lockedWardrobe,
+      appearanceContinuityIndex,
+    ) + IDENTITY_TIGHTENING;
+
+  const submit = () =>
+    provider.submit({
+      prompt,
+      aspectRatio: project.settings.aspectRatio,
+      quality: project.settings.imageQuality,
+      referenceUrls,
+    });
+  const result = await context.awaitTask(await submit(), (h) => provider.poll(h), {
+    progressFloor: 90,
+    progressCeiling: 96,
+    resubmit: submit,
+  });
+
+  return {
+    result,
+    prompt,
+    referenceUrls,
+    identityReferenceIndices,
+    appearanceContinuityIndex,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Scene video

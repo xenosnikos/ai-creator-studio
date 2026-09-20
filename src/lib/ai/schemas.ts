@@ -5,6 +5,7 @@ import {
   IDENTITY_ANGLES,
   SHOT_TYPES,
   type IdentityBlock,
+  type ProjectKind,
   type SceneSpec,
 } from "@/lib/types";
 
@@ -208,6 +209,72 @@ export const storyboardZod = z.object({
 
 export type StoryboardResult = z.infer<typeof storyboardZod>;
 
+/**
+ * The shortest string that can be a line rather than a gesture at one.
+ *
+ * Twelve characters is about three words. Below that the writer has not written
+ * narration, it has written a caption — and a two-word fragment is worse than
+ * silence downstream: it still queues a voice render, and it comes back under
+ * the window the video model can perform a voice reference from, so the shot
+ * falls through to the lip-synced path it would otherwise have avoided.
+ */
+const MIN_DIALOGUE_CHARS = 12;
+
+/**
+ * How much of a video may be wordless, as a fraction of its scenes.
+ *
+ * Not zero, because a genuine cutaway exists and forbidding it outright would
+ * make the writer pad a shot that wants to breathe. Not unbounded either: the
+ * system prompt already says never to leave a line empty and models still do
+ * it, and every silent scene is a stretch of finished video where the creator
+ * stands there saying nothing while the viewer waits.
+ */
+const SILENT_SCENE_FRACTION = 0.25;
+
+/**
+ * Every video scene carries part of the script, bar a quarter of them.
+ *
+ * Enforced here rather than trusted to the prompt because the prompt has been
+ * saying it for a while and this is the stage that can actually refuse: a
+ * failed parse is retried with the schema restated, which costs one generation,
+ * while a silent scene that gets through costs a render, a cut, and the
+ * operator's time noticing the hole.
+ *
+ * Rounded down and floored at one, so the allowance is a real cutaway budget on
+ * a long piece and exactly one free pass on a short one. A single-scene video
+ * is therefore allowed to be silent — a one-shot piece with no line is a
+ * legitimate thing to ask for, and it is the operator's brief that decides it.
+ */
+function enforceSpokenCoverage(
+  value: z.infer<typeof storyboardZod>,
+  ctx: z.RefinementCtx,
+): void {
+  const allowance = Math.max(1, Math.floor(value.scenes.length * SILENT_SCENE_FRACTION));
+  const silent = value.scenes
+    .map((scene, index) => ({ index, chars: scene.dialogue.trim().length }))
+    .filter((scene) => scene.chars < MIN_DIALOGUE_CHARS);
+  if (silent.length <= allowance) return;
+
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    path: ["scenes"],
+    message:
+      `Scene${silent.length === 1 ? "" : "s"} ${silent
+        .map((scene) => scene.index + 1)
+        .join(", ")} have no usable line (under ${MIN_DIALOGUE_CHARS} characters), which is ` +
+      `${silent.length} of ${value.scenes.length} scenes — at most ${allowance} may be silent ` +
+      `B-roll. Write narration for every scene: each one carries part of the script, sized to ` +
+      `its own duration. If a beat feels wordless, give it the quietest sentence rather than no ` +
+      `sentence, and keep "transcript" equal to the scene dialogue concatenated in order.`,
+  });
+}
+
+/**
+ * The video parser. A photo set uses `storyboardZod` unrefined — its stills are
+ * silent by definition, and the handler blanks any line that arrives anyway.
+ */
+export const videoStoryboardZod = storyboardZod.superRefine(enforceSpokenCoverage);
+
 export const storyboardSchema: Record<string, unknown> = {
   type: "object",
   properties: {
@@ -233,7 +300,11 @@ export const storyboardSchema: Record<string, unknown> = {
           dialogue: {
             type: "string",
             description:
-              "The line spoken during this scene. Empty string for silent B-roll. Must be short enough to be spoken naturally within durationSeconds (~2.5 words per second).",
+              "The line spoken during this scene. In a video EVERY scene needs one — a silent " +
+              "scene is a hole in the finished piece, and at most a quarter of them may be " +
+              "wordless B-roll before the storyboard is rejected. Empty string only for a photo " +
+              "set, where nothing is spoken at all. Must be short enough to be spoken naturally " +
+              "within durationSeconds (~2.5 words per second), and long enough to fill it.",
           },
           spec: sceneSpecJsonSchema,
         },
@@ -246,6 +317,11 @@ export const storyboardSchema: Record<string, unknown> = {
   additionalProperties: false,
 };
 
-export function parseStoryboard(value: unknown): StoryboardResult {
-  return storyboardZod.parse(value);
+/**
+ * `kind` decides which rules apply, and it defaults to the strict one: a caller
+ * that forgets to say what it is parsing gets narration enforced rather than
+ * silently skipped.
+ */
+export function parseStoryboard(value: unknown, kind: ProjectKind = "video"): StoryboardResult {
+  return kind === "photo" ? storyboardZod.parse(value) : videoStoryboardZod.parse(value);
 }
