@@ -1,9 +1,56 @@
 import { createHash } from "node:crypto";
 
+import sharp from "sharp";
+
 import { imageProvider } from "@/lib/providers/registry";
 import { creators } from "@/lib/repo";
 import { mimeForPath, persistFromUrl, readAsset } from "@/lib/storage";
 import type { CreatorReference, IdentityAngle } from "@/lib/types";
+
+const REFERENCE_MAX_SIDE = 2048;
+const REFERENCE_MAX_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Best-effort reference sizing; durable originals are never rewritten.
+ * Small images and SVG placeholders pass through unchanged. Oversized rasters
+ * become JPEGs, auto-oriented and flattened onto white.
+ * This is not validation: unreadable input (or a processing failure) forwards
+ * the original bytes and declared MIME for the provider to judge.
+ */
+export async function referenceReady(
+  bytes: Buffer,
+  mimeType: string,
+): Promise<{ bytes: Buffer; mimeType: string }> {
+  if (mimeType.includes("svg")) return { bytes, mimeType };
+  try {
+    const { width = 0, height = 0 } = await sharp(bytes).metadata();
+    if (Math.max(width, height) <= REFERENCE_MAX_SIDE && bytes.length <= REFERENCE_MAX_BYTES) {
+      return { bytes, mimeType };
+    }
+    const resized = await sharp(bytes)
+      .rotate()
+      .resize({
+        width: REFERENCE_MAX_SIDE,
+        height: REFERENCE_MAX_SIDE,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .flatten({ background: "#ffffff" })
+      .jpeg({ quality: 92 })
+      .toBuffer();
+    return { bytes: resized, mimeType: "image/jpeg" };
+  } catch {
+    return { bytes, mimeType };
+  }
+}
+
+/** Upload an image as a model reference, right-sized first. */
+async function uploadReference(bytes: Buffer, fileName: string, mimeType: string): Promise<string> {
+  const ready = await referenceReady(bytes, mimeType);
+  const name =
+    ready.mimeType === mimeType ? fileName : `${fileName.replace(/\.[a-z0-9]+$/i, "")}.jpg`;
+  return imageProvider().uploadImage(ready.bytes, name, ready.mimeType);
+}
 
 /** Refresh well inside KIE's temporary-URL lifetime. */
 const PROVIDER_UPLOAD_TTL_MS = 6 * 60 * 60 * 1000;
@@ -41,7 +88,7 @@ export async function persistReference(input: {
   // image provider. Passing it through unchanged made an uploaded creator look
   // present in the UI while the model silently rendered without that person.
   const bytes = await readAsset(stored.relativePath);
-  const remoteUrl = await imageProvider().uploadImage(
+  const remoteUrl = await uploadReference(
     bytes,
     stored.relativePath.split("/").pop() ?? "reference.png",
     stored.mimeType,
@@ -87,7 +134,7 @@ export async function providerReadyCreatorReferences(
 
       const upload = (async () => {
         const bytes = await readAsset(reference.localPath!);
-        const remoteUrl = await provider.uploadImage(
+        const remoteUrl = await uploadReference(
           bytes,
           reference.localPath!.split("/").pop() ?? `${reference.id}.png`,
           mimeForPath(reference.localPath!),
@@ -133,7 +180,7 @@ export async function providerReadyContextReferences(
       const upload = (async () => {
         const decoded = await referenceBytes(source);
         const extension = extensionForMime(decoded.mimeType);
-        return provider.uploadImage(
+        return uploadReference(
           decoded.bytes,
           `${namespace}-${index + 1}-${digest}.${extension}`,
           decoded.mimeType,
@@ -170,7 +217,7 @@ export async function providerReadyStoredReference(
 
   const upload = (async () => {
     const bytes = await readAsset(localPath);
-    return provider.uploadImage(
+    return uploadReference(
       bytes,
       `${namespace}-${localPath.split("/").pop() ?? "reference.jpg"}`,
       mimeForPath(localPath),

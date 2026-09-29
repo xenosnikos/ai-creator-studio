@@ -1,4 +1,4 @@
-node_modules/
+node_modules
 .next/
 out/
 build/
@@ -8,6 +8,18 @@ next-env.d.ts
 # Local runtime state: SQLite DB + downloaded generated assets
 data/
 
+# Keep every local environment variant out of public history.
 .env
-.env.local
+.env.*
+!.env.example
+
+# Local databases, credentials and exported archives are never source.
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.pem
+*.key
+*.zip
 .DS_Store

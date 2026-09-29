@@ -1,5 +1,7 @@
 # AI Creator Studio
 
+**Working baseline:** customized v23 plus the reviewed v24 reference-image resizing improvement. See [what was integrated, deferred, and how to protect local data](docs/PUBLIC-BASELINE.md). This is not a wholesale v24 upgrade.
+
 A proof of concept for an AI social-media content platform built around **consistent AI
 creators**. Build a creator once, then reuse them across images, reels and short videos with
 their face, body, voice and style intact — and swap one creator for another without

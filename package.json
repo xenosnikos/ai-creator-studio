@@ -12,6 +12,7 @@
     "lint": "next lint",
     "pretypecheck": "node scripts/clean-build-cache.mjs",
     "typecheck": "tsc --noEmit",
+    "test:references": "tsx --test scripts/check-reference-resizing.ts",
     "test:identity": "tsx scripts/check-identity-consistency.ts",
     "test:workflow": "tsx scripts/check-approval-workflow.ts",
     "test:ui-approval": "tsx scripts/test-approval-ui.ts",
@@ -28,6 +29,7 @@
     "next": "^16.2.12",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "sharp": "0.35.4",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -40,6 +42,9 @@
     "tailwindcss": "^3.4.17",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
+  },
+  "overrides": {
+    "sharp": "$sharp"
   },
   "engines": {
     "node": ">=22.5"
