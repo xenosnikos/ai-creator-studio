@@ -1292,7 +1292,17 @@ const PHONE_MOTION =
 export function compileVideoPrompt(
   spec: SceneSpec,
   globalStyle: string,
-  options: { dialogue?: string; speaking?: boolean; look?: CaptureLook } = {},
+  options: {
+    dialogue?: string;
+    speaking?: boolean;
+    /**
+     * The scene has a line, but it is narration laid over this shot rather than
+     * something the subject says. The words are deliberately not passed on: a
+     * video model handed a script animates a mouth saying it.
+     */
+    voiceover?: boolean;
+    look?: CaptureLook;
+  } = {},
 ): string {
   const style = sentence([spec.styleNotes, globalStyle].filter(Boolean).join(", "), FIELD.style);
   const phone = (options.look ?? "social") === "social";
@@ -1364,6 +1374,13 @@ export function compileVideoPrompt(
 
   return joinSegments([
     `BEGINNING: the shot opens already in motion — ${sentence(withoutFraming(withoutCaptureRig(substituteSubject(spec.motion))), FIELD.action)}.`,
+    // Phrased as what the subject does — a model told "not talking" tends to
+    // act out talking. The narration is attached afterwards as recorded.
+    options.voiceover && !options.speaking
+      ? "This shot plays under a separately recorded voice-over: the subject's lips stay softly " +
+        "closed and relaxed throughout, their attention on the place around them, the expression " +
+        "carried by the eyes and posture."
+      : "",
     "MIDDLE: that motion continues at a steady, physically plausible pace, with secondary movement " +
       "layered underneath it — fabric settling, hair shifting, dust or air moving through the light, " +
       "reflections and highlights travelling as the camera changes angle.",

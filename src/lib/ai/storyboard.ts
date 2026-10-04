@@ -105,9 +105,17 @@ Give every scene a "locationKey": a lowercase slug naming the PLACE it happens i
 One empty reference render is made per distinct key and fed into every shot using it, so
 reusing keys is what makes consecutive shots cut together as the same space.
 
-TALKING SCENES — read this before writing any scene that has dialogue:
-A scene with a spoken line is a scene where {CREATOR} is TALKING TO CAMERA. That is the
-shot. Write it as one.
+SPEECH MODE — decide it for every scene in a video, in "speechMode":
+- "on_camera": {CREATOR} visibly says the line to the lens. A talking-head shot.
+- "voiceover": the line is narration heard OVER the shot. {CREATOR} is shown NOT speaking —
+  walking the street, looking out at the water, tasting the food — or the shot is pure B-roll.
+  The line is still written into "dialogue" and still recorded; it is simply not lip-read.
+Narrated travel, food, place and activity shots are "voiceover". Use "on_camera" only when the
+beat is genuinely the presenter talking to the viewer face to face. In a photo set use "on_camera".
+
+TALKING SCENES — read this before writing any "on_camera" scene that has dialogue:
+An "on_camera" scene with a spoken line is a scene where {CREATOR} is TALKING TO CAMERA. That
+is the shot. Write it as one.
 - "shotType" must be "medium", "medium_close_up" or "close_up" — the mouth has to be big
   enough in frame to read. Never "wide", "extreme_wide" or "medium_wide" for a spoken line.
 - "subjectAngle" must be "front" or "three_quarter".
@@ -123,7 +131,12 @@ NEVER leave "dialogue" empty in a video with a script. A silent scene is not a b
 is a hole: the creator stands there saying nothing while the viewer waits, and the piece
 reads as broken. It also produces a clip with no sound at all, which is a different length
 of problem when the shots are joined. Every scene in a talking piece carries part of the
-line. If a beat feels like it wants a wordless shot, give it the quietest sentence instead.`;
+line. If a beat feels like it wants a wordless shot, give it the quietest sentence instead.
+
+VOICE-OVER SCENES — "voiceover" scenes are free of the talking-head rules above: any shot type,
+angle and camera move, and {CREATOR} may walk, turn and travel. Describe "facialExpression" and
+"motion" as someone NOT talking — absorbed, looking, mouth relaxed — never "speaking" or
+"mid-sentence". Size the line to the scene exactly as for any other scene.`;
 
 /**
  * The look brief, handed to the storyboard rather than only to the renderer.
@@ -340,6 +353,15 @@ export async function generateStoryboard(input: {
         `picked as "home office".`
       : "",
     settings.globalStyle ? `GLOBAL VISUAL STYLE: ${settings.globalStyle}` : "",
+    // Overlay attaches the exact recording to a clip whose mouth was never
+    // driven by it, so an on-camera line cannot match and the render route
+    // refuses it. Telling the writer up front avoids a storyboard that cannot
+    // be rendered as written.
+    settings.kind === "video" && settings.audioMode === "mux"
+      ? `AUDIO: this project overlays the exact recorded narration and does not lip-sync it. ` +
+        `On-camera speaking shots cannot be rendered in this mode, so set "speechMode" to ` +
+        `"voiceover" for every scene that has dialogue.`
+      : "",
     "",
     "PRESENTER CONTEXT (for tone and subject-matter voice only — do NOT describe their appearance):",
     `- Category: ${creator.category || "general"}`,
@@ -514,6 +536,10 @@ Leave "wardrobe" empty unless the instruction names specific clothing. If it is 
 fully specify one colour, material and cut for every visible garment and repeat the exact
 same wardrobe text in every scene; never leave an item such as a skirt or trousers uncoloured.
 
+"speechMode": keep the existing value when refining unless the instruction changes how the line
+is performed. "voiceover" means the line is narration over a shot where {CREATOR} is not speaking;
+"on_camera" means {CREATOR} says it to the lens.
+
 HARD RULE: never put the recording device in the scene — no phone propped up, no tripod,
 no ring light, no camera in frame. The camera is the viewer's eye, not an object in the
 room. If the instruction mentions one, treat it as a note about how the shot is framed,
@@ -541,7 +567,7 @@ export async function parseInstruction(input: {
     .filter(Boolean)
     .join("\n");
 
-  return llmProvider().json({
+  const spec = await llmProvider().json({
     task: "scene_prompt",
     system: SCENE_SPEC_SYSTEM,
     user,
@@ -549,6 +575,13 @@ export async function parseInstruction(input: {
     parse: parseSceneSpec,
     maxTokens: 8000,
   });
+  // A refinement that does not say how the line is performed keeps the mode the
+  // scene already had, rather than quietly turning narration back into a
+  // talking head (or the reverse).
+  if (!spec.speechMode && input.base?.speechMode) {
+    return { ...spec, speechMode: input.base.speechMode };
+  }
+  return spec;
 }
 
 /** Internals exposed for tests only. */

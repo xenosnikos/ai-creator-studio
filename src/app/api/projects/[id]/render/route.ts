@@ -3,6 +3,7 @@ import { z } from "zod";
 import { fail, ok, readJson, route } from "@/lib/api";
 import { scheduleTick } from "@/lib/jobs/runner";
 import { assets, creators, jobs, projects, scenes } from "@/lib/repo";
+import { speechModeGate } from "@/lib/speech-mode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -97,6 +98,20 @@ export const POST = route(async (request: Request, { params }: Params) => {
         `Approve the current preview still for scene ${unapproved.index + 1} before video generation.`,
         409,
       );
+    }
+  }
+
+  /**
+   * An on-camera line overlaid onto a clip whose mouth was never driven by it
+   * cannot match, so refuse before anything is queued or paid for. Only the
+   * video stage is gated: a voice take or a still is fine in every mode, and is
+   * needed whichever way out the operator chooses. The video handler re-checks
+   * this, so a job queued by any other route is refused too.
+   */
+  if (body.stages.includes("video")) {
+    for (const scene of targetScenes) {
+      const refusal = speechModeGate(scene, project.settings.audioMode);
+      if (refusal) return fail(refusal, 409);
     }
   }
 
