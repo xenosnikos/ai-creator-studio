@@ -38,6 +38,12 @@ import {
 import { imageProvider, lipSyncProvider, videoProvider } from "@/lib/providers/registry";
 import { assets, creators, jobs, plates, projects, scenes } from "@/lib/repo";
 import { uploadBase64 } from "@/lib/providers/kie/client";
+import {
+  audioModeForScene,
+  effectiveSpeechMode,
+  isVoiceover,
+  speechModeGate,
+} from "@/lib/speech-mode";
 import { absoluteAssetPath, persistFromUrl, readAsset } from "@/lib/storage";
 import { videoFingerprint, visualFingerprint, voiceFingerprint } from "@/lib/scene-fingerprint";
 import {
@@ -1421,6 +1427,13 @@ const sceneVideo: JobHandler = async (context) => {
   const project = projects.get(scene.projectId);
   if (!project) throw new Error("Project not found");
 
+  // Re-checked here, not only in the render route: a job queued any other way
+  // (an older client, a script, a re-queued job after a settings change) must
+  // not reach a paid voice or video request either. Read from the scene and
+  // project as they are now, not from anything stored on the job.
+  const refusal = speechModeGate(scene, project.settings.audioMode);
+  if (refusal) throw new Error(refusal);
+
   const creatorId = (job.input.creatorId as string | undefined) ?? project.creatorId;
   const creator = creators.get(creatorId);
   if (!creator) throw new Error("Creator not found");
@@ -1438,7 +1451,14 @@ const sceneVideo: JobHandler = async (context) => {
   }
 
   const hasDialogue = Boolean(scene.dialogue.trim());
-  const audioMode = project.settings.audioMode;
+  /**
+   * Voice-over: the line is narration over a non-speaking shot. The exact take
+   * is overlaid whatever the project default, the model never receives the
+   * words or the waveform, and nothing re-performs the voice.
+   */
+  const voiceover = isVoiceover(scene);
+  const speechMode = effectiveSpeechMode(scene.spec);
+  const audioMode = audioModeForScene(scene, project.settings.audioMode);
 
   // --- 1. Voice first ------------------------------------------------------
   let voiceAsset = hasDialogue ? assets.latestForScene(sceneId, "audio", creatorId) : null;
@@ -1534,7 +1554,8 @@ const sceneVideo: JobHandler = async (context) => {
    * approximate mouth with it.
    */
   const ALLOW_MODEL_GENERATED_SPEECH = true;
-  const wantsNativeSpeech = ALLOW_MODEL_GENERATED_SPEECH && audioMode === "lipsync";
+  const wantsNativeSpeech =
+    ALLOW_MODEL_GENERATED_SPEECH && audioMode === "lipsync" && !voiceover;
   /**
    * Why the model was not allowed to perform the line, when it was not.
    *
@@ -1552,6 +1573,7 @@ const sceneVideo: JobHandler = async (context) => {
         `split it, to get the model's own performance.`
       : null;
   const speaks =
+    !voiceover &&
     Boolean(provider.speaksFromVoice) &&
     Boolean(voiceAsset) &&
     voiceFitsReference &&
@@ -1595,9 +1617,13 @@ const sceneVideo: JobHandler = async (context) => {
   // instead of performing it. Conflating the two meant picking Overlay quietly
   // switched the prompt to the silent B-roll branch, so the subject was not
   // even shown speaking and the overlaid voice had nothing to land on.
+  //
+  // A voice-over scene is the exception: its line is narration, so the shot is
+  // compiled as non-speaking motion and the words are withheld from the model.
   const prompt = compileVideoPrompt(scene.spec, project.settings.globalStyle, {
-    dialogue: scene.dialogue,
-    speaking: hasDialogue,
+    dialogue: voiceover ? undefined : scene.dialogue,
+    speaking: hasDialogue && !voiceover,
+    voiceover,
     look: project.settings.look,
   });
   const submitClip = () =>
@@ -1607,7 +1633,7 @@ const sceneVideo: JobHandler = async (context) => {
       durationSeconds: clipSeconds,
       resolution: project.settings.videoResolution,
       aspectRatio: project.settings.aspectRatio,
-      ...(speaking ? { voiceUrl: voiceUrl!, dialogue: scene.dialogue } : {}),
+      ...(speaking && !voiceover ? { voiceUrl: voiceUrl!, dialogue: scene.dialogue } : {}),
     });
   const result = await context.awaitTask(await submitClip(), (h) => provider.poll(h), {
     progressFloor: 30,
@@ -1635,8 +1661,9 @@ const sceneVideo: JobHandler = async (context) => {
         note:
           `The clip was generated from the voice track, so it is already in sync and no ` +
           `lip-sync pass was needed. The delivery is a re-performance of the voice take, ` +
-          `not the exact recording — switch this project's audio to "Overlay" if you need ` +
-          `the exact file.`,
+          `not the exact recording. If you need the exact file, mark this scene as voice-over ` +
+          `(the presenter is shown not speaking and the recording is attached as-is); Overlay ` +
+          `cannot match an on-camera mouth and is refused for on-camera lines.`,
       }
     : await attachAudio({
         context,
@@ -1704,9 +1731,17 @@ const sceneVideo: JobHandler = async (context) => {
       voiceSpeedup: typeof voiceAsset?.meta.speedup === "number" ? voiceAsset.meta.speedup : null,
       // What actually happened to the sound, and why.
       audioMode: joined.mode,
+      // The mode this scene asked for after speech mode was applied, and the
+      // project default it came from — they differ for a voice-over.
       audioModeRequested: audioMode,
+      projectAudioMode: project.settings.audioMode,
+      speechMode,
       audioNote: [
         voiceError ? `Voice generation failed (${voiceError}).` : null,
+        voiceover && voiceAsset
+          ? "Voice-over: the subject was rendered not speaking and the recorded narration is " +
+            "attached exactly as recorded."
+          : null,
         nativeSkippedNote,
         overrunNote,
         joined.note,

@@ -320,7 +320,40 @@ export interface SceneSpec {
   styleNotes: string;
   /** Motion description handed to the video model. */
   motion: string;
+  /**
+   * Who is heard, and whether their mouth is in the picture. See SpeechMode.
+   *
+   * Optional, and absent on every scene written before it existed: absence
+   * means `on_camera`, which is exactly how those scenes were rendered. The
+   * scene fingerprints treat an unset value and `on_camera` identically, so
+   * adding the field invalidated nothing that was already rendered.
+   */
+  speechMode?: SpeechMode;
 }
+
+/**
+ * How a scene's line is performed.
+ *
+ * `on_camera` — the presenter visibly says the line to the lens. The mouth has
+ * to match the recording, so the clip must be performed from the voice
+ * (native speech or a lip-sync pass). Overlaying a recording onto a clip whose
+ * mouth was invented separately does not match, and is refused before any
+ * paid render (see speechModeGate).
+ *
+ * `voiceover` — the line is narration heard over the shot. The subject is
+ * rendered non-speaking, the video model never receives the words or the
+ * waveform, and the exact recorded take is attached as-is. The natural mode
+ * for narrated travel and B-roll, where nothing about the picture needs to be
+ * lip-read.
+ */
+export const SPEECH_MODES = ["on_camera", "voiceover"] as const;
+export type SpeechMode = (typeof SPEECH_MODES)[number];
+export const DEFAULT_SPEECH_MODE: SpeechMode = "on_camera";
+
+export const SPEECH_MODE_LABELS: Record<SpeechMode, string> = {
+  on_camera: "On camera — the presenter says the line to the lens",
+  voiceover: "Voice-over — narration over the shot, presenter not speaking",
+};
 
 /**
  * A generated reference image of a place or an object, with no people in it.

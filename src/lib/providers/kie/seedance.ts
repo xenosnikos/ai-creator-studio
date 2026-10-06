@@ -28,7 +28,9 @@ import type {
  *    the line rather than muxing the file — the words and the timbre carry over
  *    (verified: identical transcript, median F0 within 5% of the source), but
  *    the timing is its own. If a scene needs the exact ElevenLabs waveform,
- *    set the project's audio mode to `mux`.
+ *    mark it `speechMode: "voiceover"`: the shot is rendered non-speaking and
+ *    the recording is overlaid unchanged. (`mux` on an on-camera line is
+ *    refused before rendering — the overlaid mouth cannot match.)
  * 2. `duration` should track the narration closely. Any second of clip beyond
  *    the end of the speech is a second the model fills with invented motion,
  *    which is where end-of-clip drift comes from.

@@ -2,7 +2,8 @@ import { substituteSubjectWithName } from "@/lib/prompting";
 import { assets, creators, jobs, projects } from "@/lib/repo";
 import { publicUrlFor } from "@/lib/storage";
 import { videoFingerprint, visualFingerprint, voiceFingerprint } from "@/lib/scene-fingerprint";
-import type { Asset, CreatorWithRefs, Job, Project, Scene } from "@/lib/types";
+import { speechModeGate } from "@/lib/speech-mode";
+import type { Asset, AudioMode, CreatorWithRefs, Job, Project, Scene } from "@/lib/types";
 
 /**
  * View models.
@@ -153,6 +154,7 @@ function sceneViewsFor(
   creatorId: string,
   creatorName: string,
   projectJobs: Job[],
+  audioMode: AudioMode,
 ): SceneView[] {
   return scenes.map((scene) => {
     const image = toAssetView(assets.latestForScene(scene.id, "image", creatorId));
@@ -207,9 +209,9 @@ function sceneViewsFor(
           videoMatchesStill,
           !image
             ? "Needs its preview still first."
-            : stillApproved
-              ? null
-              : "Approve the current preview still first.",
+            : !stillApproved
+              ? "Approve the current preview still first."
+              : speechModeGate(scene, audioMode),
         ),
       },
     };
@@ -240,13 +242,19 @@ export function buildProjectView(projectId: string): ProjectView | null {
     .filter((c): c is CreatorWithRefs => c !== null)
     .map((c) => ({
       creator: c,
-      scenes: sceneViewsFor(project.scenes, c.id, c.name, projectJobs),
+      scenes: sceneViewsFor(project.scenes, c.id, c.name, projectJobs, project.settings.audioMode),
     }));
 
   return {
     project,
     creator,
-    scenes: sceneViewsFor(project.scenes, project.creatorId, creatorName, projectJobs),
+    scenes: sceneViewsFor(
+      project.scenes,
+      project.creatorId,
+      creatorName,
+      projectJobs,
+      project.settings.audioMode,
+    ),
     swapCreators,
     // The assembled cut, if one exists. Marked in asset meta rather than by
     // having no sceneId, so a future project-level asset cannot be mistaken

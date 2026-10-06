@@ -1,5 +1,5 @@
 import type { LLMJsonRequest, LLMProvider } from "@/lib/providers/types";
-import type { CameraMove, IdentityAngle, ShotType } from "@/lib/types";
+import type { CameraMove, IdentityAngle, ShotType, SpeechMode } from "@/lib/types";
 
 /**
  * Deterministic stand-in for Claude.
@@ -61,13 +61,31 @@ function topicFrom(text: string): string {
   return line.length > 90 ? `${line.slice(0, 90)}…` : line || "the topic";
 }
 
-function mockSceneSpec(brief: string, index: number) {
+/**
+ * Narrated briefs get voice-over scenes, everything else stays on camera.
+ *
+ * Keyword-driven so tests can ask for either deterministically; the real
+ * writer decides from the brief as a whole.
+ */
+function mockSpeechMode(brief: string): SpeechMode {
+  return /voice[- ]?over|narrat|b-roll|travel/i.test(topicFrom(brief)) ? "voiceover" : "on_camera";
+}
+
+/**
+ * `speechMode` is left out of a free-form instruction result on purpose: the
+ * caller keeps the scene's existing mode, which is what a refinement that does
+ * not mention it should do.
+ */
+function mockSceneSpec(brief: string, index: number, speechMode?: SpeechMode) {
   const topic = topicFrom(brief);
+  const narrated = speechMode === "voiceover";
   return {
     shotType: SHOT_CYCLE[index % SHOT_CYCLE.length],
     cameraMove: MOVE_CYCLE[index % MOVE_CYCLE.length],
     subjectAngle: ANGLE_CYCLE[index % ANGLE_CYCLE.length],
-    action: `{CREATOR} presents to camera about ${topic}`,
+    action: narrated
+      ? `{CREATOR} explores a place connected to ${topic}`
+      : `{CREATOR} presents to camera about ${topic}`,
     facialExpression: index === 0 ? "warm, welcoming smile" : "engaged, confident",
     pose: index % 2 === 0 ? "standing, weight on one hip, hands relaxed" : "gesturing with one hand",
     wardrobe: "",
@@ -75,7 +93,10 @@ function mockSceneSpec(brief: string, index: number) {
     lighting: "Soft key from camera left, gentle rim light, natural falloff",
     mood: "Confident and approachable",
     styleNotes: "Cinematic, 35mm, shallow depth of field, subtle film grain",
-    motion: `{CREATOR} holds the frame and speaks naturally; camera ${MOVE_CYCLE[index % MOVE_CYCLE.length].replace(/_/g, " ")}`,
+    motion: narrated
+      ? `{CREATOR} walks slowly and looks around, mouth relaxed; camera ${MOVE_CYCLE[index % MOVE_CYCLE.length].replace(/_/g, " ")}`
+      : `{CREATOR} holds the frame and speaks naturally; camera ${MOVE_CYCLE[index % MOVE_CYCLE.length].replace(/_/g, " ")}`,
+    ...(speechMode ? { speechMode } : {}),
   };
 }
 
@@ -112,7 +133,7 @@ function mockStoryboard(brief: string) {
     title: `Scene ${i + 1}`,
     durationSeconds: Math.max(3, Math.min(15, durationSeconds)),
     dialogue: lines[i % lines.length],
-    spec: mockSceneSpec(brief, i),
+    spec: mockSceneSpec(brief, i, mockSpeechMode(brief)),
   }));
 
   return {

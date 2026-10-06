@@ -10,7 +10,10 @@ import {
   IDENTITY_ANGLES,
   IDENTITY_ANGLE_LABELS,
   SHOT_TYPES,
+  SPEECH_MODES,
+  SPEECH_MODE_LABELS,
   type SceneSpec,
+  type SpeechMode,
 } from "@/lib/types";
 import type { SceneStage, SceneView, StageStatus } from "@/lib/views";
 
@@ -270,6 +273,9 @@ export function SceneCard({
             <span className="chip">{humanise(scene.spec.cameraMove)}</span>
             <span className="chip">{IDENTITY_ANGLE_LABELS[scene.spec.subjectAngle]}</span>
             <span className="chip">{scene.spec.mood}</span>
+            {scene.dialogue && scene.spec.speechMode === "voiceover" ? (
+              <span className="chip">voice-over</span>
+            ) : null}
           </div>
 
           <p className="text-sm leading-relaxed text-slate-300">{scene.readableAction}</p>
@@ -279,6 +285,9 @@ export function SceneCard({
 
           {scene.dialogue ? (
             <p className="rounded-lg border border-edge bg-ink px-3 py-2 text-sm italic text-slate-300">
+              {scene.spec.speechMode === "voiceover" ? (
+                <span className="not-italic text-[11px] text-muted">Narration · </span>
+              ) : null}
               “{scene.dialogue}”
             </p>
           ) : (
@@ -343,6 +352,12 @@ export function SceneCard({
           {/* Grouped rather than a flat wall of ten textareas: who the shot is
               of, where it happens, and how it is captured. */}
           <Group title="Subject">
+            {/* How the line is performed. Shown even before a line exists so
+                the choice is visible when one is added. */}
+            <SpeechModeSelect
+              value={spec.speechMode ?? "on_camera"}
+              onChange={(speechMode) => setSpec({ ...spec, speechMode })}
+            />
             <div className="grid gap-3 sm:grid-cols-3">
               <Select
                 label="Shot type"
@@ -600,6 +615,45 @@ function Select({
           </option>
         ))}
       </select>
+    </div>
+  );
+}
+
+/**
+ * On camera or voice-over.
+ *
+ * Its own control rather than another generic Select because the two options
+ * need their consequence spelled out: voice-over keeps the exact recording and
+ * shows the presenter not speaking; on camera needs the clip performed from the
+ * voice, and is refused under the Overlay audio mode.
+ */
+function SpeechModeSelect({
+  value,
+  onChange,
+}: {
+  value: SpeechMode;
+  onChange: (value: SpeechMode) => void;
+}) {
+  const id = useId();
+  return (
+    <div>
+      <label className="label" htmlFor={id}>Line delivery</label>
+      <select
+        id={id}
+        className="field"
+        value={value}
+        onChange={(event) => onChange(event.target.value as SpeechMode)}
+      >
+        {SPEECH_MODES.map((mode) => (
+          <option key={mode} value={mode}>
+            {SPEECH_MODE_LABELS[mode]}
+          </option>
+        ))}
+      </select>
+      <p className="mt-0.5 text-[10px] text-muted">
+        Voice-over keeps the exact recording and renders the presenter not speaking. On camera
+        needs lip-synced audio; the Overlay audio mode cannot match a mouth.
+      </p>
     </div>
   );
 }

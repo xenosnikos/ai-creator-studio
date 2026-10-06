@@ -4,6 +4,7 @@ import {
   CAMERA_MOVES,
   IDENTITY_ANGLES,
   SHOT_TYPES,
+  SPEECH_MODES,
   type IdentityBlock,
   type ProjectKind,
   type SceneSpec,
@@ -115,6 +116,9 @@ const sceneSpecZod = z.object({
   mood: z.string().min(2),
   styleNotes: z.string(),
   motion: z.string().min(3),
+  // Optional so every stored spec written before it existed still parses, and
+  // stays unset (which means on_camera) rather than gaining a default value.
+  speechMode: z.enum(SPEECH_MODES).optional(),
 });
 
 const sceneSpecJsonSchema: Record<string, unknown> = {
@@ -162,6 +166,15 @@ const sceneSpecJsonSchema: Record<string, unknown> = {
       description:
         "Motion for the video model: how the subject and camera move over the clip. Also refers to the subject as {CREATOR}.",
     },
+    speechMode: {
+      type: "string",
+      enum: [...SPEECH_MODES],
+      description:
+        "How this scene's line is performed. 'on_camera': {CREATOR} visibly says the line to the lens (a talking-head shot). " +
+        "'voiceover': the line is narration heard OVER the shot while {CREATOR} is shown NOT speaking — walking, looking, " +
+        "eating, taking in the place — or the shot is pure B-roll. Narrated travel, food and place shots are 'voiceover'. " +
+        "Keep the dialogue either way: voice-over narration is still the scene's line.",
+    },
   },
   required: [
     "locationKey",
@@ -177,6 +190,7 @@ const sceneSpecJsonSchema: Record<string, unknown> = {
     "mood",
     "styleNotes",
     "motion",
+    "speechMode",
   ],
   additionalProperties: false,
 };
@@ -300,7 +314,8 @@ export const storyboardSchema: Record<string, unknown> = {
           dialogue: {
             type: "string",
             description:
-              "The line spoken during this scene. In a video EVERY scene needs one — a silent " +
+              "The line heard during this scene — spoken to camera, or narrated over the shot when " +
+              "spec.speechMode is 'voiceover'. In a video EVERY scene needs one — a silent " +
               "scene is a hole in the finished piece, and at most a quarter of them may be " +
               "wordless B-roll before the storyboard is rejected. Empty string only for a photo " +
               "set, where nothing is spoken at all. Must be short enough to be spoken naturally " +
